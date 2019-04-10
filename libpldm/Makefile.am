@@ -1,0 +1,14 @@
+nobase_include_HEADERS = \
+	base.h \
+	pldm_types.h
+
+libpldmoem_LTLIBRARIES = libpldmoem.la
+libpldmoemdir = ${libdir}
+libpldmoem_la_SOURCES = \
+	base.c
+
+libpldmoem_la_LDFLAGS = \
+        -version-info 1:0:0 -shared
+
+pkgconfiglibdir = ${libdir}/pkgconfig
+pkgconfiglib_DATA = libpldmoem.pc
