@@ -1,11 +1,13 @@
 nobase_include_HEADERS = \
 	base.h \
-	pldm_types.h
+	pldm_types.h \
+	file_io.h
 
 libpldmoem_LTLIBRARIES = libpldmoem.la
 libpldmoemdir = ${libdir}
 libpldmoem_la_SOURCES = \
-	base.c
+	base.c \
+	file_io.c
 
 libpldmoem_la_LDFLAGS = \
         -version-info 1:0:0 -shared

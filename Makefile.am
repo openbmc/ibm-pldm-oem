@@ -1,1 +1,1 @@
-SUBDIRS = libpldm
+SUBDIRS = libpldm test
