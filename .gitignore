@@ -60,3 +60,4 @@ Makefile
 /test-suite.log
 /test/*.gcda
 /test/*.gcno
+/test/libpldm_fileio_test
