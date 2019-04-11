@@ -20,6 +20,9 @@ AX_APPEND_COMPILE_FLAGS([-Wall -Werror], [CXXFLAGS])
 # For linking
 LT_INIT
 
+# Check for needed modules
+PKG_CHECK_MODULES([PHOSPHOR_LOGGING], [phosphor-logging])
+
 # Check/set gtest specific functions.
 AX_PTHREAD([GTEST_CPPFLAGS="-DGTEST_HAS_PTHREAD=1"],[GTEST_CPPFLAGS="-DGTEST_HAS_PTHREAD=0"])
 AC_SUBST(GTEST_CPPFLAGS)
@@ -42,5 +45,5 @@ AS_IF([test "x$enable_oe_sdk" == "xyes"],
 )
 
 # Create configured output
-AC_CONFIG_FILES([Makefile libpldm/Makefile test/Makefile])
+AC_CONFIG_FILES([Makefile libpldm/Makefile libpldmresponder/Makefile test/Makefile])
 AC_OUTPUT
