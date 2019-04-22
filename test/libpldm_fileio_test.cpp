@@ -7,7 +7,7 @@
 
 #include <gtest/gtest.h>
 
-TEST(ReadFileIntoMemory, testGoodDecodeRequest)
+TEST(ReadWriteFileMemory, testGoodDecodeRequest)
 {
     std::array<uint8_t, PLDM_READ_FILE_MEM_REQ_BYTES> requestMsg{};
 
@@ -31,9 +31,9 @@ TEST(ReadFileIntoMemory, testGoodDecodeRequest)
     uint64_t retAddress = 0;
 
     // Invoke decode the read file memory request
-    auto rc = decode_read_file_memory_req(requestMsg.data(), requestMsg.size(),
-                                          &retFileHandle, &retOffset,
-                                          &retLength, &retAddress);
+    auto rc = decode_rw_file_memory_req(requestMsg.data(), requestMsg.size(),
+                                        &retFileHandle, &retOffset, &retLength,
+                                        &retAddress);
 
     ASSERT_EQ(rc, PLDM_SUCCESS);
     ASSERT_EQ(fileHandle, retFileHandle);
@@ -42,7 +42,7 @@ TEST(ReadFileIntoMemory, testGoodDecodeRequest)
     ASSERT_EQ(address, retAddress);
 }
 
-TEST(ReadFileIntoMemory, testBadDecodeRequest)
+TEST(ReadWriteFileMemory, testBadDecodeRequest)
 {
     uint32_t fileHandle = 0;
     uint32_t offset = 0;
@@ -50,31 +50,33 @@ TEST(ReadFileIntoMemory, testBadDecodeRequest)
     uint64_t address = 0;
 
     // Request payload message is missing
-    auto rc = decode_read_file_memory_req(NULL, 0, &fileHandle, &offset,
-                                          &length, &address);
+    auto rc = decode_rw_file_memory_req(NULL, 0, &fileHandle, &offset, &length,
+                                        &address);
     ASSERT_EQ(rc, PLDM_ERROR_INVALID_DATA);
 
     std::array<uint8_t, PLDM_READ_FILE_MEM_REQ_BYTES> requestMsg{};
 
     // Address is NULL
-    rc = decode_read_file_memory_req(requestMsg.data(), requestMsg.size(),
-                                     &fileHandle, &offset, &length, NULL);
+    rc = decode_rw_file_memory_req(requestMsg.data(), requestMsg.size(),
+                                   &fileHandle, &offset, &length, NULL);
     ASSERT_EQ(rc, PLDM_ERROR_INVALID_DATA);
 
     // Payload length is invalid
-    rc = decode_read_file_memory_req(requestMsg.data(), 0, &fileHandle, &offset,
-                                     &length, &address);
+    rc = decode_rw_file_memory_req(requestMsg.data(), 0, &fileHandle, &offset,
+                                   &length, &address);
     ASSERT_EQ(rc, PLDM_ERROR_INVALID_LENGTH);
 }
 
-TEST(ReadFileIntoMemory, testGoodEncodeResponse)
+TEST(ReadWriteFileMemory, testGoodEncodeResponse)
 {
     std::array<uint8_t, sizeof(pldm_msg_hdr) + PLDM_READ_FILE_MEM_RESP_BYTES>
         responseMsg{};
     uint32_t length = 0xFF00EE11;
     pldm_msg* response = reinterpret_cast<pldm_msg*>(responseMsg.data());
 
-    auto rc = encode_read_file_memory_resp(0, PLDM_SUCCESS, length, response);
+    // ReadFileIntoMemory
+    auto rc = encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
+                                         PLDM_SUCCESS, length, response);
 
     ASSERT_EQ(rc, PLDM_SUCCESS);
     ASSERT_EQ(response->hdr.request, PLDM_RESPONSE);
@@ -84,21 +86,47 @@ TEST(ReadFileIntoMemory, testGoodEncodeResponse)
     ASSERT_EQ(response->payload[0], PLDM_SUCCESS);
     ASSERT_EQ(0, memcmp(response->payload + sizeof(response->payload[0]),
                         &length, sizeof(length)));
+
+    // WriteFileFromMemory
+    rc = encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY,
+                                    PLDM_SUCCESS, length, response);
+
+    ASSERT_EQ(rc, PLDM_SUCCESS);
+    ASSERT_EQ(response->hdr.request, PLDM_RESPONSE);
+    ASSERT_EQ(response->hdr.instance_id, 0);
+    ASSERT_EQ(response->hdr.type, PLDM_IBM_OEM_TYPE);
+    ASSERT_EQ(response->hdr.command, PLDM_WRITE_FILE_FROM_MEMORY);
+    ASSERT_EQ(response->payload[0], PLDM_SUCCESS);
+    ASSERT_EQ(0, memcmp(response->payload + sizeof(response->payload[0]),
+                        &length, sizeof(length)));
 }
 
-TEST(ReadFileIntoMemory, testBadEncodeResponse)
+TEST(ReadWriteFileMemory, testBadEncodeResponse)
 {
     std::array<uint8_t, sizeof(pldm_msg_hdr) + PLDM_READ_FILE_MEM_RESP_BYTES>
         responseMsg{};
     uint32_t length = 0;
     pldm_msg* response = reinterpret_cast<pldm_msg*>(responseMsg.data());
 
-    auto rc = encode_read_file_memory_resp(0, PLDM_ERROR, length, response);
+    // ReadFileIntoMemory
+    auto rc = encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
+                                         PLDM_ERROR, length, response);
 
     ASSERT_EQ(rc, PLDM_SUCCESS);
     ASSERT_EQ(response->hdr.request, PLDM_RESPONSE);
     ASSERT_EQ(response->hdr.instance_id, 0);
     ASSERT_EQ(response->hdr.type, PLDM_IBM_OEM_TYPE);
     ASSERT_EQ(response->hdr.command, PLDM_READ_FILE_INTO_MEMORY);
+    ASSERT_EQ(response->payload[0], PLDM_ERROR);
+
+    // WriteFileFromMemory
+    rc = encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY, PLDM_ERROR,
+                                    length, response);
+
+    ASSERT_EQ(rc, PLDM_SUCCESS);
+    ASSERT_EQ(response->hdr.request, PLDM_RESPONSE);
+    ASSERT_EQ(response->hdr.instance_id, 0);
+    ASSERT_EQ(response->hdr.type, PLDM_IBM_OEM_TYPE);
+    ASSERT_EQ(response->hdr.command, PLDM_WRITE_FILE_FROM_MEMORY);
     ASSERT_EQ(response->payload[0], PLDM_ERROR);
 }
