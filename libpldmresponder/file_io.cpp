@@ -21,66 +21,131 @@ namespace responder
 namespace fs = std::filesystem;
 using namespace phosphor::logging;
 
-int transferDatatoHost(const fs::path& file, uint32_t offset, uint32_t length,
-                       uint64_t address)
+namespace dma
 {
-    // Align the length of the memory mapping to the page size.
+
+/** @struct AspeedXdmaOp
+ *
+ * Structure representing XDMA operation
+ */
+struct AspeedXdmaOp
+{
+    uint8_t upstream;  //!< boolean indicating the direction of the DMA
+                       //!< operation, true means a transfer from BMC to host.
+    uint64_t hostAddr; //!< the DMA address on the host side, configured by
+                       //!< PCI subsystem.
+    uint32_t len;      //!< the size of the transfer in bytes, it should be a
+                       //!< multiple of 16 bytes
+} __attribute__((packed));
+
+constexpr auto xdmaDev = "/dev/xdma";
+
+int transferDataHost(const fs::path& path, uint32_t offset, uint32_t length,
+                     uint64_t address, bool upstream)
+{
     static const size_t pageSize = getpagesize();
     uint32_t numPages = length / pageSize;
-    uint32_t pageLength = numPages * pageSize;
-    if (length > pageLength)
+    uint32_t pageAlignedLength = numPages * pageSize;
+
+    if (length > pageAlignedLength)
     {
-        pageLength += pageSize;
+        pageAlignedLength += pageSize;
     }
 
-    auto mmapCleanup = [pageLength](void* vgaMem) {
-        munmap(vgaMem, pageLength);
+    auto mmapCleanup = [pageAlignedLength](void* vgaMem) {
+        munmap(vgaMem, pageAlignedLength);
     };
 
     int fd = -1;
     int rc = 0;
-    fd = open(dma::xdmaDev, O_RDWR);
+    fd = open(xdmaDev, O_RDWR);
     if (fd < 0)
     {
-        log<level::ERR>("Opening the xdma device failed", entry("RC=%d", rc));
+        rc = -errno;
+        log<level::ERR>("Failed to open the XDMA device", entry("RC=%d", rc));
         return rc;
     }
-    auto xdmaFDPtr = std::make_unique<utils::CustomFD>(fd);
-    auto& xdmaFD = *(xdmaFDPtr.get());
 
-    void* vgaMem = nullptr;
+    utils::CustomFD xdmaFd(fd);
 
-    vgaMem = mmap(nullptr, pageLength, PROT_WRITE, MAP_SHARED, xdmaFD(), 0);
+    void* vgaMem;
+    vgaMem = mmap(nullptr, pageAlignedLength, upstream ? PROT_WRITE : PROT_READ,
+                  MAP_SHARED, xdmaFd(), 0);
     if (MAP_FAILED == vgaMem)
     {
         rc = -errno;
-        log<level::ERR>("mmap operation failed", entry("RC=%d", rc));
+        log<level::ERR>("Failed to mmap the XDMA device", entry("RC=%d", rc));
         return rc;
     }
+
     std::unique_ptr<void, decltype(mmapCleanup)> vgaMemPtr(vgaMem, mmapCleanup);
 
-    // Populate the VGA memory with the contents of the file
-    std::ifstream stream(file.string());
-    stream.seekg(offset);
-    stream.read(static_cast<char*>(vgaMemPtr.get()), length);
-
-    struct dma::AspeedXdmaOp xdmaOp
+    if (upstream)
     {
-    };
-    xdmaOp.upstream = true;
+        std::ifstream stream(path.string());
+
+        stream.seekg(offset);
+        stream.read(static_cast<char*>(vgaMemPtr.get()), length);
+    }
+
+    AspeedXdmaOp xdmaOp;
+    xdmaOp.upstream = upstream ? 1 : 0;
     xdmaOp.hostAddr = address;
     xdmaOp.len = length;
 
-    // Initiate the DMA operation
-    rc = write(xdmaFD(), &xdmaOp, sizeof(xdmaOp));
+    rc = write(xdmaFd(), &xdmaOp, sizeof(xdmaOp));
     if (rc < 0)
     {
         rc = -errno;
-        log<level::ERR>("the dma operation failed", entry("RC=%d", rc));
+
+        log<level::ERR>("Failed to execute the DMA operation",
+                        entry("RC=%d", rc));
         return rc;
     }
 
-    return rc;
+    if (!upstream)
+    {
+        std::ofstream stream(path.string());
+
+        stream.seekp(offset);
+        stream.write(static_cast<const char*>(vgaMemPtr.get()), length);
+    }
+
+    return 0;
+}
+
+} // namespace dma
+
+void transferAll(uint8_t command, fs::path& path, uint32_t offset,
+                 uint32_t length, uint64_t address, bool upstream,
+                 pldm_msg* response)
+{
+    uint32_t origLength = length;
+
+    while (length > dma::maxSize)
+    {
+        auto rc = dma::transferDataHost(path, offset, dma::maxSize, address,
+                                        upstream);
+        if (rc < 0)
+        {
+            encode_rw_file_memory_resp(0, command, PLDM_ERROR, 0, response);
+            return;
+        }
+
+        offset += dma::maxSize;
+        length -= dma::maxSize;
+        address += dma::maxSize;
+    }
+
+    auto rc = dma::transferDataHost(path, offset, length, address, upstream);
+    if (rc < 0)
+    {
+        encode_rw_file_memory_resp(0, command, PLDM_ERROR, 0, response);
+        return;
+    }
+
+    encode_rw_file_memory_resp(0, command, PLDM_SUCCESS, origLength, response);
+    return;
 }
 
 void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
@@ -90,33 +155,33 @@ void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
     uint32_t offset = 0;
     uint32_t length = 0;
     uint64_t address = 0;
+    fs::path path("");
 
-    if (payloadLength != PLDM_READ_FILE_MEM_REQ_BYTES)
+    if (payloadLength != PLDM_RW_FILE_MEM_REQ_BYTES)
     {
-        encode_read_file_memory_resp(0, PLDM_ERROR_INVALID_LENGTH, 0, response);
+        encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
+                                   PLDM_ERROR_INVALID_LENGTH, 0, response);
         return;
     }
 
-    decode_read_file_memory_req(request, payloadLength, &fileHandle, &offset,
-                                &length, &address);
+    decode_rw_file_memory_req(request, payloadLength, &fileHandle, &offset,
+                              &length, &address);
 
-    constexpr auto readFilePath = "";
-
-    fs::path path{readFilePath};
     if (!fs::exists(path))
     {
         log<level::ERR>("File does not exist", entry("HANDLE=%d", fileHandle));
-        encode_read_file_memory_resp(0, PLDM_INVALID_FILE_HANDLE, 0, response);
+        encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
+                                   PLDM_INVALID_FILE_HANDLE, 0, response);
         return;
     }
 
     auto fileSize = fs::file_size(path);
-
     if (offset >= fileSize)
     {
         log<level::ERR>("Offset exceeds file size", entry("OFFSET=%d", offset),
                         entry("FILE_SIZE=%d", fileSize));
-        encode_read_file_memory_resp(0, PLDM_DATA_OUT_OF_RANGE, 0, response);
+        encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
+                                   PLDM_DATA_OUT_OF_RANGE, 0, response);
         return;
     }
 
@@ -127,41 +192,55 @@ void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
 
     if (length % dma::minSize)
     {
-        log<level::ERR>("Readlength is not a multiple of DMA minSize",
+        log<level::ERR>("Read length is not a multiple of DMA minSize",
                         entry("LENGTH=%d", length));
-        encode_read_file_memory_resp(0, PLDM_INVALID_READ_LENGTH, 0, response);
+        encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
+                                   PLDM_INVALID_READ_LENGTH, 0, response);
         return;
     }
 
-    uint32_t origLength = length;
+    transferAll(PLDM_READ_FILE_INTO_MEMORY, path, offset, length, address, true,
+                response);
+}
 
-    while (length > 0)
+void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
+                         pldm_msg* response)
+{
+    uint32_t fileHandle = 0;
+    uint32_t offset = 0;
+    uint32_t length = 0;
+    uint64_t address = 0;
+    fs::path path("");
+
+    if (payloadLength != PLDM_RW_FILE_MEM_REQ_BYTES)
     {
-        if (length > dma::maxSize)
-        {
-            auto rc =
-                dma::transferDatatoHost(path, offset, dma::maxSize, address);
-            if (rc < 0)
-            {
-                encode_read_file_memory_resp(0, PLDM_ERROR, 0, response);
-                return;
-            }
-            offset += dma::maxSize;
-            length -= dma::maxSize;
-            address += dma::maxSize;
-        }
-        else
-        {
-            auto rc = dma::transferDatatoHost(path, offset, length, address);
-            if (rc < 0)
-            {
-                encode_read_file_memory_resp(0, PLDM_ERROR, 0, response);
-                return;
-            }
-            encode_read_file_memory_resp(0, PLDM_SUCCESS, origLength, response);
-            return;
-        }
+        encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY,
+                                   PLDM_ERROR_INVALID_LENGTH, 0, response);
+        return;
     }
+
+    decode_rw_file_memory_req(request, payloadLength, &fileHandle, &offset,
+                              &length, &address);
+
+    if (length % dma::minSize)
+    {
+        log<level::ERR>("Write length is not a multiple of DMA minSize",
+                        entry("LENGTH=%d", length));
+        encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY,
+                                   PLDM_INVALID_WRITE_LENGTH, 0, response);
+        return;
+    }
+
+    if (!fs::exists(path))
+    {
+        log<level::ERR>("File does not exist", entry("HANDLE=%d", fileHandle));
+        encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY,
+                                   PLDM_INVALID_FILE_HANDLE, 0, response);
+        return;
+    }
+
+    transferAll(PLDM_WRITE_FILE_FROM_MEMORY, path, offset, length, address,
+                false, response);
 }
 
 } // namespace responder
