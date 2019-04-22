@@ -79,15 +79,19 @@ constexpr size_t maxSize = (16 * 1024 * 1024) - 4096;
 
 namespace fs = std::filesystem;
 
-/** @brief API to transfer data from BMC to host using DMA
+/** @brief API to transfer data between BMC and host using DMA
  *
- *  @param[in] file - pathname of the file from which to DMA data
- *  @param[in] offset - offset in the file
- *  @param[in] length - length of data to read from the file
- *  @param[in] address - dma address on the host side to transfer data
+ * @param[in] file     - pathname of the file to transfer data from or to
+ * @param[in] offset   - offset in the file
+ * @param[in] length   - length of the data to transfer
+ * @param[in] address  - DMA address on the host
+ * @param[in] upstream - indicates directon of the transfer; true indicates
+ *                       transfer to the host
+ *
+ * @return             - returns 0 on success, negative errno on failure
  */
-int transferDatatoHost(const fs::path& file, uint32_t offset, uint32_t length,
-                       uint64_t address);
+int transferDataHost(const fs::path& file, uint32_t offset, uint32_t length,
+                     uint64_t address, bool upstream);
 
 } // namespace dma
 
@@ -99,6 +103,15 @@ int transferDatatoHost(const fs::path& file, uint32_t offset, uint32_t length,
  */
 void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
                         pldm_msg* response);
+
+/** @brief Handler for writeFileIntoMemory command
+ *
+ *  @param[in] request - pointer to PLDM request payload
+ *  @param[in] payloadLength - length of the message payload
+ *  @param[out] response - response message location
+ */
+void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
+                         pldm_msg* response);
 
 } // namespace responder
 } // namespace pldm
