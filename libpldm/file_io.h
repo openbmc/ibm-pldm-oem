@@ -56,6 +56,11 @@ int decode_read_file_memory_req(const uint8_t *msg, size_t payload_length,
  */
 int encode_read_file_memory_resp(uint8_t instance_id, uint8_t completion_code,
 				 uint32_t length, struct pldm_msg *msg);
+int encode_read_file_memory_req(uint8_t instance_id, struct pldm_msg *msg,
+				uint32_t file_handle, uint32_t offset,
+				uint32_t length, uint64_t address);
+int decode_read_file_memory_resp(const uint8_t *msg, size_t payload_length,
+				 uint8_t *completion_code, uint32_t *length);
 
 #ifdef __cplusplus
 }
