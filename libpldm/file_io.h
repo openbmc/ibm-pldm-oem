@@ -47,21 +47,51 @@ int decode_rw_file_memory_req(const uint8_t *msg, size_t payload_length,
 			      uint32_t *file_handle, uint32_t *offset,
 			      uint32_t *length, uint64_t *address);
 
-/** @brief Create a PLDM response for ReadFileIntoMemory and
- *         WriteFileFromMemory
+/** @brief Create a PLDM response for ReadFileIntoMemory and WriteFileFromMemory
  *
  *  @param[in] instance_id - Message's instance id
  *  @param[in] command - PLDM command
  *  @param[in] completion_code - PLDM completion code
  *  @param[in] length - Number of bytes read. This could be less than what the
 			 requester asked for.
- *  @param[in,out] msg - Message will be written to this
+ *  @param[out] msg - Message will be written to this
  *  @return pldm_completion_codes
  *  @note  Caller is responsible for memory alloc and dealloc of param 'msg'
  */
 int encode_rw_file_memory_resp(uint8_t instance_id, uint8_t command,
 			       uint8_t completion_code, uint32_t length,
 			       struct pldm_msg *msg);
+
+/** @brief Encode ReadFileIntoMemory and WriteFileFromMemory commands request
+ *         data
+ *
+ *  @param[in] instance_id - Message's instance id
+ *  @param[in] command - PLDM command
+ *  @param[in] file_handle - A handle to the file
+ *  @param[in] offset -  Offset to the file at which the read should begin
+ *  @param[in] length -  Number of bytes to be read/written
+ *  @param[in] address - Memory address where the file content has to be
+ *                        written to
+ *  @param[out] msg - Message will be written to this
+ *  @return pldm_completion_codes
+ */
+int encode_rw_file_memory_req(uint8_t instance_id, uint8_t command,
+			      struct pldm_msg *msg, uint32_t file_handle,
+			      uint32_t offset, uint32_t length,
+			      uint64_t address);
+
+/** @brief Decode ReadFileIntoMemory and WriteFileFromMemory commands response
+ *         data
+ *
+ *  @param[in] msg - pointer to PLDM response message payload
+ *  @param[in] payload_length - Length of response payload
+ *  @param[out] completion_code - PLDM completion code
+ *  @param[out] length - Number of bytes to be read/written
+ *  @return pldm_completion_codes
+ */
+
+int decode_rw_file_memory_resp(const uint8_t *msg, size_t payload_length,
+			       uint8_t *completion_code, uint32_t *length);
 
 #ifdef __cplusplus
 }
