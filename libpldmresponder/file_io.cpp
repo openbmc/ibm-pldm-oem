@@ -27,8 +27,8 @@ namespace fs = std::filesystem;
 namespace dma
 {
 
-int transferDataHost(const fs::path& file, uint32_t offset, uint32_t length,
-                     uint64_t address, bool upstream)
+int DMA::transferDataHost(const fs::path& file, uint32_t offset,
+                          uint32_t length, uint64_t address, bool upstream)
 {
     static const size_t pageSize = getpagesize();
     uint32_t numPages = length / pageSize;
@@ -107,37 +107,6 @@ int transferDataHost(const fs::path& file, uint32_t offset, uint32_t length,
 
 } // namespace dma
 
-void transferAll(fs::path& path, uint32_t offset, uint32_t length,
-                 uint64_t address, bool upstream, pldm_msg* response)
-{
-    uint32_t origLength = length;
-
-    while (length > dma::maxSize)
-    {
-        auto rc = dma::transferDataHost(path, offset, dma::maxSize, address,
-                                        upstream);
-        if (rc < 0)
-        {
-            encode_rw_file_memory_resp(0, PLDM_ERROR, 0, response);
-            return;
-        }
-
-        offset += dma::maxSize;
-        length -= dma::maxSize;
-        address += dma::maxSize;
-    }
-
-    auto rc = dma::transferDataHost(path, offset, length, address, upstream);
-    if (rc < 0)
-    {
-        encode_rw_file_memory_resp(0, PLDM_ERROR, 0, response);
-        return;
-    }
-
-    encode_rw_file_memory_resp(0, PLDM_SUCCESS, origLength, response);
-    return;
-}
-
 void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
                         pldm_msg* response)
 {
@@ -157,17 +126,17 @@ void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
     decode_rw_file_memory_req(request, payloadLength, &fileHandle, &offset,
                               &length, &address);
 
-    if (!fs::exists(path))
-    {
-        std::cerr << "File does not exist\n";
-        encode_rw_file_memory_resp(0, PLDM_INVALID_FILE_HANDLE, 0, response);
-        return;
-    }
-
     if (length % dma::minSize)
     {
         std::cerr << "Readlength is not a multiple of 16\n";
         encode_rw_file_memory_resp(0, PLDM_INVALID_READ_LENGTH, 0, response);
+        return;
+    }
+
+    if (!fs::exists(path))
+    {
+        std::cerr << "File does not exist\n";
+        encode_rw_file_memory_resp(0, PLDM_INVALID_FILE_HANDLE, 0, response);
         return;
     }
 
@@ -179,7 +148,9 @@ void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
         return;
     }
 
-    transferAll(path, offset, length, address, true, response);
+    using namespace dma;
+    DMA intf;
+    transferAll<DMA>(&intf, path, offset, length, address, true, response);
 }
 
 void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
@@ -200,6 +171,12 @@ void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
 
     decode_rw_file_memory_req(request, payloadLength, &fileHandle, &offset,
                               &length, &address);
+    if (length % dma::minSize)
+    {
+        std::cerr << "Writelength is not a multiple of 16\n";
+        encode_rw_file_memory_resp(0, PLDM_INVALID_WRITE_LENGTH, 0, response);
+        return;
+    }
 
     if (!fs::exists(path))
     {
@@ -208,14 +185,9 @@ void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
         return;
     }
 
-    if (length % dma::minSize)
-    {
-        std::cerr << "Writelength is not a multiple of 16\n";
-        encode_rw_file_memory_resp(0, PLDM_INVALID_WRITE_LENGTH, 0, response);
-        return;
-    }
-
-    transferAll(path, offset, length, address, false, response);
+    using namespace dma;
+    DMA intf;
+    transferAll<DMA>(&intf, path, offset, length, address, false, response);
 }
 
 } // namespace responder
