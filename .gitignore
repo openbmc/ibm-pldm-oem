@@ -60,4 +60,6 @@ Makefile
 /test-suite.log
 /test/*.gcda
 /test/*.gcno
-/test/libpldm_fileio_test
+/test/libpldmoem_fileio_test
+/test/libpldmoemresponder_fileio_test
+
