@@ -1,4 +1,8 @@
+#include "config.h"
+
 #include "file_io.hpp"
+
+#include "file_table.hpp"
 
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -8,6 +12,7 @@
 
 #include <cstring>
 #include <fstream>
+#include <iostream>
 #include <phosphor-logging/log.hpp>
 
 #include "libpldm/base.h"
@@ -133,7 +138,6 @@ void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
     uint32_t offset = 0;
     uint32_t length = 0;
     uint64_t address = 0;
-    fs::path path("");
 
     if (payloadLength != PLDM_RW_FILE_MEM_REQ_BYTES)
     {
@@ -145,7 +149,11 @@ void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
     decode_rw_file_memory_req(request, payloadLength, &fileHandle, &offset,
                               &length, &address);
 
-    if (!fs::exists(path))
+    using namespace pldm::filetable;
+    auto& table = getFileTable(FILE_TABLE_JSON);
+    auto [rc, value] = table.getFileEntry(fileHandle);
+
+    if (!rc || !fs::exists(value.fsPath))
     {
         log<level::ERR>("File does not exist", entry("HANDLE=%d", fileHandle));
         encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
@@ -153,7 +161,7 @@ void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
         return;
     }
 
-    auto fileSize = fs::file_size(path);
+    auto fileSize = fs::file_size(value.fsPath);
     if (offset >= fileSize)
     {
         log<level::ERR>("Offset exceeds file size", entry("OFFSET=%d", offset),
@@ -179,8 +187,8 @@ void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
 
     using namespace dma;
     DMA intf;
-    transferAll<DMA>(&intf, PLDM_READ_FILE_INTO_MEMORY, path, offset, length,
-                     address, true, response);
+    transferAll<DMA>(&intf, PLDM_READ_FILE_INTO_MEMORY, value.fsPath, offset,
+                     length, address, true, response);
 }
 
 void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
@@ -190,7 +198,6 @@ void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
     uint32_t offset = 0;
     uint32_t length = 0;
     uint64_t address = 0;
-    fs::path path("");
 
     if (payloadLength != PLDM_RW_FILE_MEM_REQ_BYTES)
     {
@@ -211,7 +218,11 @@ void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
         return;
     }
 
-    if (!fs::exists(path))
+    using namespace pldm::filetable;
+    auto& table = getFileTable(FILE_TABLE_JSON);
+    auto [rc, value] = table.getFileEntry(fileHandle);
+
+    if (!rc || !fs::exists(value.fsPath))
     {
         log<level::ERR>("File does not exist", entry("HANDLE=%d", fileHandle));
         encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY,
@@ -219,7 +230,7 @@ void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
         return;
     }
 
-    auto fileSize = fs::file_size(path);
+    auto fileSize = fs::file_size(value.fsPath);
     if (offset >= fileSize)
     {
         log<level::ERR>("Offset exceeds file size", entry("OFFSET=%d", offset),
@@ -231,8 +242,8 @@ void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
 
     using namespace dma;
     DMA intf;
-    transferAll<DMA>(&intf, PLDM_WRITE_FILE_FROM_MEMORY, path, offset, length,
-                     address, false, response);
+    transferAll<DMA>(&intf, PLDM_WRITE_FILE_FROM_MEMORY, value.fsPath, offset,
+                     length, address, false, response);
 }
 
 } // namespace responder
