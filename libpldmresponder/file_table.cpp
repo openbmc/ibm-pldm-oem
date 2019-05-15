@@ -116,5 +116,15 @@ Table FileTable::operator()() const
     return table;
 }
 
+FileTable& buildFileTable(const std::string& fileTablePath)
+{
+    static FileTable table;
+    if (table.isEmpty())
+    {
+        table = std::move(FileTable(fileTablePath));
+    }
+    return table;
+}
+
 } // namespace filetable
 } // namespace pldm
