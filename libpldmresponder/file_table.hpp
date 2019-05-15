@@ -109,5 +109,15 @@ class FileTable
     Handle handle = 0;
 };
 
+/** @brief Build the file attribute table if not already built using the
+ *         file table config.
+ *
+ *  @param[in] fileTablePath - path of the file table config
+ *
+ *  @return FileTable& - Reference to instance of file table
+ */
+
+FileTable& getFileTable(const std::string& fileTablePath);
+
 } // namespace filetable
 } // namespace pldm

@@ -44,6 +44,8 @@ AS_IF([test "x$enable_oe_sdk" == "xyes"],
     AC_SUBST([OESDK_TESTCASE_FLAGS], [$testcase_flags])
 )
 
+AC_DEFINE(FILE_TABLE_JSON, "/var/lib/pldm/fileTable.json", [JSON file containing file info for File I/O])
+
 # Create configured output
 AC_CONFIG_FILES([Makefile libpldm/Makefile libpldmresponder/Makefile test/Makefile])
 AC_OUTPUT
