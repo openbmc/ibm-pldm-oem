@@ -126,5 +126,15 @@ std::tuple<bool, FileEntry> FileTable::getFileEntry(Handle handle) const
     }
 }
 
+FileTable& getFileTable(const std::string& fileTablePath)
+{
+    static FileTable table;
+    if (table.empty())
+    {
+        table = std::move(FileTable(fileTablePath));
+    }
+    return table;
+}
+
 } // namespace filetable
 } // namespace pldm
