@@ -1,4 +1,9 @@
 #include "libpldmresponder/file_io.hpp"
+#include "libpldmresponder/file_table.hpp"
+
+#include <filesystem>
+#include <fstream>
+#include <nlohmann/json.hpp>
 
 #include "libpldm/base.h"
 #include "libpldm/file_io.h"
@@ -6,6 +11,7 @@
 #include <gmock/gmock-matchers.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
 #define SD_JOURNAL_SUPPRESS_LOCATION
 
 #include <systemd/sd-journal.h>
@@ -27,6 +33,88 @@ int sd_journal_send_with_location(const char* file, const char* line,
     return 0;
 }
 }
+
+namespace fs = std::filesystem;
+using Json = nlohmann::json;
+using namespace pldm::filetable;
+
+class TestFileTable : public testing::Test
+{
+  public:
+    void SetUp() override
+    {
+        // Create a temporary directory to hold the config file and files to
+        // populate the file table.
+        char tmppldm[] = "/tmp/pldm_fileio_table.XXXXXX";
+        dir = fs::path(mkdtemp(tmppldm));
+
+        // Copy the sample image files to the directory
+        fs::copy("./files", dir);
+
+        imageFile = dir / "NVRAM-IMAGE";
+        auto jsonObjects = Json::array();
+        auto obj = Json::object();
+        obj["path"] = imageFile.c_str();
+        obj["file_traits"] = 1;
+
+        jsonObjects.push_back(obj);
+        obj.clear();
+        cksumFile = dir / "NVRAM-IMAGE-CKSUM";
+        obj["path"] = cksumFile.c_str();
+        obj["file_traits"] = 4;
+        jsonObjects.push_back(obj);
+
+        fileTableConfig = dir / "configFile.json";
+        std::ofstream file(fileTableConfig.c_str());
+        file << std::setw(4) << jsonObjects << std::endl;
+    }
+
+    void TearDown() override
+    {
+        fs::remove_all(dir);
+    }
+
+    fs::path dir;
+    fs::path imageFile;
+    fs::path cksumFile;
+    fs::path fileTableConfig;
+};
+
+class TestFileAttrTable : public testing::Test
+{
+  public:
+    void SetUp() override
+    {
+        // Create a temporary directory to hold the config file and files to
+        // populate the file table.
+        char tmppldm[] = "/tmp/pldm_fileio_table.XXXXXX";
+        dir = fs::path(mkdtemp(tmppldm));
+        std::cerr << dir.c_str() << std::endl;
+
+        // Copy the sample file to the directory
+        fs::copy_file("./files/NVRAM-IMAGE", dir / "NVRAM-IMAGE");
+
+        imageFile = dir / "NVRAM-IMAGE";
+        auto jsonObjects = Json::array();
+        auto obj = Json::object();
+        obj["path"] = imageFile.c_str();
+        obj["file_traits"] = 1;
+        jsonObjects.push_back(obj);
+
+        fileTableConfig = dir / "configFile.json";
+        std::ofstream file(fileTableConfig.c_str());
+        file << std::setw(4) << jsonObjects << std::endl;
+    }
+
+    void TearDown() override
+    {
+        fs::remove_all(dir);
+    }
+
+    fs::path dir;
+    fs::path imageFile;
+    fs::path fileTableConfig;
+};
 
 namespace pldm
 {
@@ -190,4 +278,69 @@ TEST(WriteFileFromMemory, BadPath)
     // The length field is not a multiple of DMA minsize
     writeFileFromMemory(requestMsg.data(), requestMsg.size(), response);
     ASSERT_EQ(response->payload[0], PLDM_INVALID_WRITE_LENGTH);
+}
+
+TEST(FileTable, configNotExist)
+{
+    logs.clear();
+    FileTable tableObj("");
+    EXPECT_EQ(logs.size(), 1);
+}
+
+TEST_F(TestFileTable, testFileEntry)
+{
+    FileTable tableObj(fileTableConfig.c_str());
+
+    // Test file handle 0, the file size is 1K bytes.
+    auto [rc, value] = tableObj.getFileEntry(0);
+    ASSERT_EQ(rc, true);
+    ASSERT_EQ(value.handle, 0);
+    ASSERT_EQ(strcmp(value.fsPath.c_str(), imageFile.c_str()), 0);
+    ASSERT_EQ(static_cast<uint32_t>(fs::file_size(value.fsPath)), 1024);
+    ASSERT_EQ(value.traits, 1);
+    ASSERT_EQ(true, fs::exists(value.fsPath));
+
+    // Test file handle 1, the file size is 16 bytes
+    auto [rc1, value1] = tableObj.getFileEntry(1);
+    ASSERT_EQ(rc1, true);
+    ASSERT_EQ(value1.handle, 1);
+    ASSERT_EQ(strcmp(value1.fsPath.c_str(), cksumFile.c_str()), 0);
+    ASSERT_EQ(static_cast<uint32_t>(fs::file_size(value1.fsPath)), 16);
+    ASSERT_EQ(value1.traits, 4);
+    ASSERT_EQ(true, fs::exists(value1.fsPath));
+
+    // Test invalid file handle
+    auto [rc2, value2] = tableObj.getFileEntry(2);
+    ASSERT_EQ(rc2, false);
+}
+
+TEST_F(TestFileAttrTable, testFileTable)
+{
+    FileTable tableObj(fileTableConfig.c_str());
+
+    // Test file handle 0
+    auto [rc, value] = tableObj.getFileEntry(0);
+    ASSERT_EQ(rc, true);
+    ASSERT_EQ(value.handle, 0);
+    ASSERT_EQ(strcmp(value.fsPath.c_str(), imageFile.c_str()), 0);
+    ASSERT_EQ(static_cast<uint32_t>(fs::file_size(value.fsPath)), 1024);
+    ASSERT_EQ(value.traits, 1);
+    ASSERT_EQ(true, fs::exists(value.fsPath));
+
+    // <4 bytes - File handle - 0 (0x00 0x00 0x00 0x00)>,
+    // <2 bytes - Filename length - 11 (0x0b 0x00>
+    // <11 bytes - Filename - ASCII for NVRAM-IMAGE>
+    // <4 bytes - File size - 1024 (0x00 0x04 0x00 0x00)>
+    // <4 bytes - File traits - 1 (0x01 0x00 0x00 0x00)>
+    // <3 bytes - Padding (0x00 0x00 0x00)>
+    // <4 bytes - Checksum - 1818411840(0x40 0xc3 0x62 0x6c)>
+    std::vector<uint8_t> attrTable = {
+        0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x4e, 0x56, 0x52, 0x41, 0x4d,
+        0x2d, 0x49, 0x4d, 0x41, 0x47, 0x45, 0x00, 0x04, 0x00, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0xc3, 0x62, 0x6c};
+
+    // Validate file attribute table
+    auto table = tableObj.getFileAttrTable();
+    ASSERT_EQ(true,
+              std::equal(attrTable.begin(), attrTable.end(), table.begin()));
 }
