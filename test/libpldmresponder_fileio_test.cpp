@@ -227,7 +227,7 @@ TEST(TransferDataHost, BadPath)
     ASSERT_EQ(responsePtr->payload[0], PLDM_ERROR);
 }
 
-TEST(ReadFileIntoMemory, BadPath)
+TEST(ReadFileIntoMemory, InvalidPayloadLength)
 {
     uint32_t fileHandle = 0;
     uint32_t offset = 0;
@@ -247,6 +247,121 @@ TEST(ReadFileIntoMemory, BadPath)
     auto response = readFileIntoMemory(requestMsg.data(), 0);
     auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
     ASSERT_EQ(responsePtr->payload[0], PLDM_ERROR_INVALID_LENGTH);
+}
+
+TEST_F(TestFileTable, ReadFileInvalidFileHandle)
+{
+    // Invalid file handle in the file table
+    uint32_t fileHandle = 2;
+    uint32_t offset = 0;
+    uint32_t length = 0;
+    uint64_t address = 0;
+
+    std::array<uint8_t, PLDM_RW_FILE_MEM_REQ_BYTES> requestMsg{};
+    memcpy(requestMsg.data(), &fileHandle, sizeof(fileHandle));
+    memcpy(requestMsg.data() + sizeof(fileHandle), &offset, sizeof(offset));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset), &length,
+           sizeof(length));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset) +
+               sizeof(length),
+           &address, sizeof(address));
+
+    using namespace pldm::filetable;
+    // Initialise the file table with 2 valid file handles 0 & 1.
+    auto& table = getFileTable(fileTableConfig.c_str());
+
+    auto response = readFileIntoMemory(requestMsg.data(), requestMsg.size());
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_INVALID_FILE_HANDLE);
+    // Clear the file table contents.
+    table.clear();
+}
+
+TEST_F(TestFileTable, ReadFileInvalidOffset)
+{
+    uint32_t fileHandle = 0;
+    // The file size is 1024, so the offset is invalid
+    uint32_t offset = 1024;
+    uint32_t length = 0;
+    uint64_t address = 0;
+
+    std::array<uint8_t, PLDM_RW_FILE_MEM_REQ_BYTES> requestMsg{};
+    memcpy(requestMsg.data(), &fileHandle, sizeof(fileHandle));
+    memcpy(requestMsg.data() + sizeof(fileHandle), &offset, sizeof(offset));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset), &length,
+           sizeof(length));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset) +
+               sizeof(length),
+           &address, sizeof(address));
+
+    using namespace pldm::filetable;
+    auto& table = getFileTable(fileTableConfig.c_str());
+    auto [rc, value] = table.getFileEntry(0);
+
+    auto response = readFileIntoMemory(requestMsg.data(), requestMsg.size());
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_DATA_OUT_OF_RANGE);
+    // Clear the file table contents.
+    table.clear();
+}
+
+TEST_F(TestFileTable, ReadFileInvalidLength)
+{
+    uint32_t fileHandle = 0;
+    uint32_t offset = 100;
+    // Length should be a multiple of dma min size(16)
+    uint32_t length = 10;
+    uint64_t address = 0;
+
+    std::array<uint8_t, PLDM_RW_FILE_MEM_REQ_BYTES> requestMsg{};
+    memcpy(requestMsg.data(), &fileHandle, sizeof(fileHandle));
+    memcpy(requestMsg.data() + sizeof(fileHandle), &offset, sizeof(offset));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset), &length,
+           sizeof(length));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset) +
+               sizeof(length),
+           &address, sizeof(address));
+
+    using namespace pldm::filetable;
+    auto& table = getFileTable(fileTableConfig.c_str());
+    auto [rc, value] = table.getFileEntry(0);
+
+    auto response = readFileIntoMemory(requestMsg.data(), requestMsg.size());
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_INVALID_READ_LENGTH);
+    // Clear the file table contents.
+    table.clear();
+}
+
+TEST_F(TestFileTable, ReadFileInvalidEffectiveLength)
+{
+    uint32_t fileHandle = 0;
+    // valid offset
+    uint32_t offset = 100;
+    // length + offset exceeds the size, so effective length is
+    // filesize(1024) - offset(100). The effective length is not a multiple of
+    // DMA min size(16)
+    uint32_t length = 1024;
+    uint64_t address = 0;
+
+    std::array<uint8_t, PLDM_RW_FILE_MEM_REQ_BYTES> requestMsg{};
+    memcpy(requestMsg.data(), &fileHandle, sizeof(fileHandle));
+    memcpy(requestMsg.data() + sizeof(fileHandle), &offset, sizeof(offset));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset), &length,
+           sizeof(length));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset) +
+               sizeof(length),
+           &address, sizeof(address));
+
+    using namespace pldm::filetable;
+    auto& table = getFileTable(fileTableConfig.c_str());
+    auto [rc, value] = table.getFileEntry(0);
+
+    auto response = readFileIntoMemory(requestMsg.data(), requestMsg.size());
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_INVALID_READ_LENGTH);
+    // Clear the file table contents.
+    table.clear();
 }
 
 TEST(WriteFileFromMemory, BadPath)
@@ -274,6 +389,62 @@ TEST(WriteFileFromMemory, BadPath)
     response = writeFileFromMemory(requestMsg.data(), requestMsg.size());
     responsePtr = reinterpret_cast<pldm_msg*>(response.data());
     ASSERT_EQ(responsePtr->payload[0], PLDM_INVALID_WRITE_LENGTH);
+}
+
+TEST_F(TestFileTable, WriteFileInvalidFileHandle)
+{
+    // Invalid file handle in the file table
+    uint32_t fileHandle = 2;
+    uint32_t offset = 0;
+    uint32_t length = 16;
+    uint64_t address = 0;
+
+    std::array<uint8_t, PLDM_RW_FILE_MEM_REQ_BYTES> requestMsg{};
+    memcpy(requestMsg.data(), &fileHandle, sizeof(fileHandle));
+    memcpy(requestMsg.data() + sizeof(fileHandle), &offset, sizeof(offset));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset), &length,
+           sizeof(length));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset) +
+               sizeof(length),
+           &address, sizeof(address));
+
+    using namespace pldm::filetable;
+    // Initialise the file table with 2 valid file handles 0 & 1.
+    auto& table = getFileTable(fileTableConfig.c_str());
+
+    auto response = writeFileFromMemory(requestMsg.data(), requestMsg.size());
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_INVALID_FILE_HANDLE);
+    // Clear the file table contents.
+    table.clear();
+}
+
+TEST_F(TestFileTable, WriteFileInvalidOffset)
+{
+    uint32_t fileHandle = 0;
+    // The file size is 1024, so the offset is invalid
+    uint32_t offset = 1024;
+    uint32_t length = 16;
+    uint64_t address = 0;
+
+    std::array<uint8_t, PLDM_RW_FILE_MEM_REQ_BYTES> requestMsg{};
+    memcpy(requestMsg.data(), &fileHandle, sizeof(fileHandle));
+    memcpy(requestMsg.data() + sizeof(fileHandle), &offset, sizeof(offset));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset), &length,
+           sizeof(length));
+    memcpy(requestMsg.data() + sizeof(fileHandle) + sizeof(offset) +
+               sizeof(length),
+           &address, sizeof(address));
+
+    using namespace pldm::filetable;
+    // Initialise the file table with 2 valid file handles 0 & 1.
+    auto& table = getFileTable(TestFileTable::fileTableConfig.c_str());
+
+    auto response = writeFileFromMemory(requestMsg.data(), requestMsg.size());
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_DATA_OUT_OF_RANGE);
+    // Clear the file table contents.
+    table.clear();
 }
 
 TEST(FileTable, configNotExist)
