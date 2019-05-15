@@ -1,7 +1,8 @@
 libpldmoemresponder_LTLIBRARIES = libpldmoemresponder.la
 libpldmoemresponderdir = ${libdir}
 libpldmoemresponder_la_SOURCES = \
-	file_io.cpp
+	file_io.cpp \
+	file_table.cpp
 
 libpldmoemresponder_la_LIBADD = \
 	../libpldm/libpldmoem.la
