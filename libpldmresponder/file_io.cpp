@@ -1,4 +1,8 @@
+#include "config.h"
+
 #include "file_io.hpp"
+
+#include "file_table.hpp"
 
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -132,7 +136,6 @@ Response readFileIntoMemory(const uint8_t* request, size_t payloadLength)
     uint32_t offset = 0;
     uint32_t length = 0;
     uint64_t address = 0;
-    fs::path path("");
 
     Response response((sizeof(pldm_msg_hdr) + PLDM_RW_FILE_MEM_RESP_BYTES), 0);
     auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
@@ -147,7 +150,24 @@ Response readFileIntoMemory(const uint8_t* request, size_t payloadLength)
     decode_rw_file_memory_req(request, payloadLength, &fileHandle, &offset,
                               &length, &address);
 
-    if (!fs::exists(path))
+    using namespace pldm::filetable;
+    auto& table = buildFileTable(FILE_TABLE_JSON);
+    FileEntry value{};
+
+    try
+    {
+        value = table.at(fileHandle);
+    }
+    catch (std::exception& e)
+    {
+        log<level::ERR>("File handle does not exist in the file table",
+                        entry("HANDLE=%d", fileHandle));
+        encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
+                                   PLDM_INVALID_FILE_HANDLE, 0, responsePtr);
+        return response;
+    }
+
+    if (!fs::exists(value.fsPath))
     {
         log<level::ERR>("File does not exist", entry("HANDLE=%d", fileHandle));
         encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
@@ -155,7 +175,7 @@ Response readFileIntoMemory(const uint8_t* request, size_t payloadLength)
         return response;
     }
 
-    auto fileSize = fs::file_size(path);
+    auto fileSize = fs::file_size(value.fsPath);
     if (offset >= fileSize)
     {
         log<level::ERR>("Offset exceeds file size", entry("OFFSET=%d", offset),
@@ -181,8 +201,8 @@ Response readFileIntoMemory(const uint8_t* request, size_t payloadLength)
 
     using namespace dma;
     DMA intf;
-    return transferAll<DMA>(&intf, PLDM_READ_FILE_INTO_MEMORY, path, offset,
-                            length, address, true);
+    return transferAll<DMA>(&intf, PLDM_READ_FILE_INTO_MEMORY, value.fsPath,
+                            offset, length, address, true);
 }
 
 Response writeFileFromMemory(const uint8_t* request, size_t payloadLength)
@@ -191,7 +211,6 @@ Response writeFileFromMemory(const uint8_t* request, size_t payloadLength)
     uint32_t offset = 0;
     uint32_t length = 0;
     uint64_t address = 0;
-    fs::path path("");
 
     Response response(sizeof(pldm_msg_hdr) + PLDM_RW_FILE_MEM_RESP_BYTES, 0);
     auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
@@ -215,7 +234,24 @@ Response writeFileFromMemory(const uint8_t* request, size_t payloadLength)
         return response;
     }
 
-    if (!fs::exists(path))
+    using namespace pldm::filetable;
+    auto& table = buildFileTable(FILE_TABLE_JSON);
+    FileEntry value{};
+
+    try
+    {
+        value = table.at(fileHandle);
+    }
+    catch (std::exception& e)
+    {
+        log<level::ERR>("File handle does not exist in the file table",
+                        entry("HANDLE=%d", fileHandle));
+        encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY,
+                                   PLDM_INVALID_FILE_HANDLE, 0, responsePtr);
+        return response;
+    }
+
+    if (!fs::exists(value.fsPath))
     {
         log<level::ERR>("File does not exist", entry("HANDLE=%d", fileHandle));
         encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY,
@@ -223,7 +259,7 @@ Response writeFileFromMemory(const uint8_t* request, size_t payloadLength)
         return response;
     }
 
-    auto fileSize = fs::file_size(path);
+    auto fileSize = fs::file_size(value.fsPath);
     if (offset >= fileSize)
     {
         log<level::ERR>("Offset exceeds file size", entry("OFFSET=%d", offset),
@@ -235,8 +271,8 @@ Response writeFileFromMemory(const uint8_t* request, size_t payloadLength)
 
     using namespace dma;
     DMA intf;
-    return transferAll<DMA>(&intf, PLDM_WRITE_FILE_FROM_MEMORY, path, offset,
-                            length, address, false);
+    return transferAll<DMA>(&intf, PLDM_WRITE_FILE_FROM_MEMORY, value.fsPath,
+                            offset, length, address, false);
 }
 
 } // namespace responder
