@@ -38,6 +38,7 @@ libpldmoemresponder_fileio_test_LDFLAGS = $(test_ldflags)
 libpldmoemresponder_fileio_test_LDADD = \
 	$(top_builddir)/libpldm/base.o \
 	$(top_builddir)/libpldm/file_io.o \
-	$(top_builddir)/libpldmresponder/file_io.o
+	$(top_builddir)/libpldmresponder/file_io.o \
+	$(top_builddir)/libpldmresponder/file_table.o
 libpldmoemresponder_fileio_test_SOURCES = libpldmresponder_fileio_test.cpp
 
