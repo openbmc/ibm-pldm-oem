@@ -87,7 +87,7 @@ int DMA::transferDataHost(const fs::path& path, uint32_t offset,
         stream.seekg(offset);
         stream.read(static_cast<char*>(vgaMemPtr.get()), length);
 
-        if (stream.gcount() != length)
+        if (static_cast<uint32_t>(stream.gcount()) != length)
         {
             log<level::ERR>("mismatch between number of characters to read and "
                             "the length read",
