@@ -52,3 +52,60 @@ int encode_rw_file_memory_resp(uint8_t instance_id, uint8_t command,
 
 	return PLDM_SUCCESS;
 }
+
+int decode_get_file_table_req(const uint8_t *msg, size_t payload_length,
+			      uint32_t *transfer_handle,
+			      uint8_t *transfer_opflag, uint8_t *table_type)
+{
+	if (msg == NULL || transfer_handle == NULL || transfer_opflag == NULL ||
+	    table_type == NULL) {
+		return PLDM_ERROR_INVALID_DATA;
+	}
+
+	if (payload_length != PLDM_GET_FILE_TABLE_REQ_BYTES) {
+		return PLDM_ERROR_INVALID_LENGTH;
+	}
+
+	*transfer_handle = le32toh(*((uint32_t *)msg));
+	*transfer_opflag = *(msg + sizeof(*transfer_handle));
+	*table_type =
+	    *(msg + sizeof(*transfer_handle) + sizeof(*transfer_opflag));
+
+	return PLDM_SUCCESS;
+}
+
+int encode_get_file_table_resp(uint8_t instance_id, uint8_t completion_code,
+			       uint32_t next_transfer_handle,
+			       uint8_t transfer_flag, const uint8_t *table_data,
+			       size_t table_size, struct pldm_msg *msg)
+{
+	struct pldm_header_info header = {0};
+	int rc = PLDM_SUCCESS;
+
+	uint8_t *payload = msg->payload;
+	*payload = completion_code;
+
+	header.msg_type = PLDM_RESPONSE;
+	header.instance = instance_id;
+	header.pldm_type = PLDM_IBM_OEM_TYPE;
+	header.command = PLDM_GET_FILE_TABLE;
+
+	if ((rc = pack_pldm_header(&header, &(msg->hdr))) > PLDM_SUCCESS) {
+		return rc;
+	}
+
+	if (msg->payload[0] == PLDM_SUCCESS) {
+		uint8_t *dst = msg->payload + sizeof(completion_code);
+		next_transfer_handle = htole32(next_transfer_handle);
+		memcpy(dst, &next_transfer_handle,
+		       sizeof(next_transfer_handle));
+		dst += sizeof(next_transfer_handle);
+
+		memcpy(dst, &transfer_flag, sizeof(transfer_flag));
+		dst += sizeof(transfer_flag);
+
+		memcpy(dst, table_data, table_size);
+	}
+
+	return PLDM_SUCCESS;
+}
