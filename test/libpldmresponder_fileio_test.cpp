@@ -57,9 +57,6 @@ TEST(TransferDataHost, GoodPath)
     using namespace pldm::responder::dma;
 
     MockDMA dmaObj;
-    std::array<uint8_t, sizeof(pldm_msg_hdr) + PLDM_RW_FILE_MEM_RESP_BYTES>
-        responseMsg{};
-    pldm_msg* response = reinterpret_cast<pldm_msg*>(responseMsg.data());
     fs::path path("");
 
     // Minimum length of 16 and expect transferDataHost to be called once
@@ -67,19 +64,21 @@ TEST(TransferDataHost, GoodPath)
     // int, the default value for int is 0)
     uint32_t length = minSize;
     EXPECT_CALL(dmaObj, transferDataHost(path, 0, length, 0, true)).Times(1);
-    transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path, 0, length,
-                         0, true, response);
-    ASSERT_EQ(response->payload[0], PLDM_SUCCESS);
-    ASSERT_EQ(0, memcmp(response->payload + sizeof(response->payload[0]),
+    auto response = transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY,
+                                         path, 0, length, 0, true);
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_SUCCESS);
+    ASSERT_EQ(0, memcmp(responsePtr->payload + sizeof(responsePtr->payload[0]),
                         &length, sizeof(length)));
 
     // maxsize of DMA
     length = maxSize;
     EXPECT_CALL(dmaObj, transferDataHost(path, 0, length, 0, true)).Times(1);
-    transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path, 0, length,
-                         0, true, response);
-    ASSERT_EQ(response->payload[0], PLDM_SUCCESS);
-    ASSERT_EQ(0, memcmp(response->payload + sizeof(response->payload[0]),
+    response = transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path,
+                                    0, length, 0, true);
+    responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_SUCCESS);
+    ASSERT_EQ(0, memcmp(responsePtr->payload + sizeof(responsePtr->payload[0]),
                         &length, sizeof(length)));
 
     // length greater than maxsize of DMA
@@ -87,28 +86,31 @@ TEST(TransferDataHost, GoodPath)
     EXPECT_CALL(dmaObj, transferDataHost(path, 0, maxSize, 0, true)).Times(1);
     EXPECT_CALL(dmaObj, transferDataHost(path, maxSize, minSize, maxSize, true))
         .Times(1);
-    transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path, 0, length,
-                         0, true, response);
-    ASSERT_EQ(response->payload[0], PLDM_SUCCESS);
-    ASSERT_EQ(0, memcmp(response->payload + sizeof(response->payload[0]),
+    response = transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path,
+                                    0, length, 0, true);
+    responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_SUCCESS);
+    ASSERT_EQ(0, memcmp(responsePtr->payload + sizeof(responsePtr->payload[0]),
                         &length, sizeof(length)));
 
     // length greater than 2*maxsize of DMA
     length = 3 * maxSize;
     EXPECT_CALL(dmaObj, transferDataHost(_, _, _, _, true)).Times(3);
-    transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path, 0, length,
-                         0, true, response);
-    ASSERT_EQ(response->payload[0], PLDM_SUCCESS);
-    ASSERT_EQ(0, memcmp(response->payload + sizeof(response->payload[0]),
+    response = transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path,
+                                    0, length, 0, true);
+    responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_SUCCESS);
+    ASSERT_EQ(0, memcmp(responsePtr->payload + sizeof(responsePtr->payload[0]),
                         &length, sizeof(length)));
 
     // check for downstream(copy data from host to BMC) parameter
     length = minSize;
     EXPECT_CALL(dmaObj, transferDataHost(path, 0, length, 0, false)).Times(1);
-    transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path, 0, length,
-                         0, false, response);
-    ASSERT_EQ(response->payload[0], PLDM_SUCCESS);
-    ASSERT_EQ(0, memcmp(response->payload + sizeof(response->payload[0]),
+    response = transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path,
+                                    0, length, 0, false);
+    responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_SUCCESS);
+    ASSERT_EQ(0, memcmp(responsePtr->payload + sizeof(responsePtr->payload[0]),
                         &length, sizeof(length)));
 }
 
@@ -117,25 +119,24 @@ TEST(TransferDataHost, BadPath)
     using namespace pldm::responder::dma;
 
     MockDMA dmaObj;
-    std::array<uint8_t, sizeof(pldm_msg_hdr) + PLDM_RW_FILE_MEM_RESP_BYTES>
-        responseMsg{};
-    pldm_msg* response = reinterpret_cast<pldm_msg*>(responseMsg.data());
     fs::path path("");
 
     // Minimum length of 16 and transferDataHost returning a negative errno
     uint32_t length = minSize;
     EXPECT_CALL(dmaObj, transferDataHost(_, _, _, _, _)).WillOnce(Return(-1));
-    transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path, 0, length,
-                         0, true, response);
-    ASSERT_EQ(response->payload[0], PLDM_ERROR);
+    auto response = transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY,
+                                         path, 0, length, 0, true);
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_ERROR);
 
     // length greater than maxsize of DMA and transferDataHost returning a
     // negative errno
     length = maxSize + minSize;
     EXPECT_CALL(dmaObj, transferDataHost(_, _, _, _, _)).WillOnce(Return(-1));
-    transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path, 0, length,
-                         0, true, response);
-    ASSERT_EQ(response->payload[0], PLDM_ERROR);
+    response = transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path,
+                                    0, length, 0, true);
+    responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_ERROR);
 }
 
 TEST(ReadFileIntoMemory, BadPath)
@@ -154,13 +155,10 @@ TEST(ReadFileIntoMemory, BadPath)
                sizeof(length),
            &address, sizeof(address));
 
-    std::array<uint8_t, sizeof(pldm_msg_hdr) + PLDM_RW_FILE_MEM_RESP_BYTES>
-        responseMsg{};
-    pldm_msg* response = reinterpret_cast<pldm_msg*>(responseMsg.data());
-
     // Pass invalid payload length
-    readFileIntoMemory(requestMsg.data(), 0, response);
-    ASSERT_EQ(response->payload[0], PLDM_ERROR_INVALID_LENGTH);
+    auto response = readFileIntoMemory(requestMsg.data(), 0);
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_ERROR_INVALID_LENGTH);
 }
 
 TEST(WriteFileFromMemory, BadPath)
@@ -179,15 +177,13 @@ TEST(WriteFileFromMemory, BadPath)
                sizeof(length),
            &address, sizeof(address));
 
-    std::array<uint8_t, sizeof(pldm_msg_hdr) + PLDM_RW_FILE_MEM_RESP_BYTES>
-        responseMsg{};
-    pldm_msg* response = reinterpret_cast<pldm_msg*>(responseMsg.data());
-
     // Pass invalid payload length
-    writeFileFromMemory(requestMsg.data(), 0, response);
-    ASSERT_EQ(response->payload[0], PLDM_ERROR_INVALID_LENGTH);
+    auto response = writeFileFromMemory(requestMsg.data(), 0);
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_ERROR_INVALID_LENGTH);
 
     // The length field is not a multiple of DMA minsize
-    writeFileFromMemory(requestMsg.data(), requestMsg.size(), response);
-    ASSERT_EQ(response->payload[0], PLDM_INVALID_WRITE_LENGTH);
+    response = writeFileFromMemory(requestMsg.data(), requestMsg.size());
+    responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_INVALID_WRITE_LENGTH);
 }
