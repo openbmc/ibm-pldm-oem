@@ -104,15 +104,19 @@ class DMA
  * @param[in] address  - DMA address on the host
  * @param[in] upstream - indicates direction of the transfer; true indicates
  *                       transfer to the host
- * @param[out] response - response message location
+ * @return PLDM response message
  */
 
 template <class DMAInterface>
-void transferAll(DMAInterface* intf, uint8_t command, fs::path& path,
-                 uint32_t offset, uint32_t length, uint64_t address,
-                 bool upstream, pldm_msg* response)
+std::vector<uint8_t> transferAll(DMAInterface* intf, uint8_t command,
+                                 fs::path& path, uint32_t offset,
+                                 uint32_t length, uint64_t address,
+                                 bool upstream)
 {
     uint32_t origLength = length;
+    std::vector<uint8_t> response(
+        sizeof(pldm_msg_hdr) + PLDM_RW_FILE_MEM_RESP_BYTES, 0);
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
 
     while (length > dma::maxSize)
     {
@@ -120,8 +124,8 @@ void transferAll(DMAInterface* intf, uint8_t command, fs::path& path,
                                          upstream);
         if (rc < 0)
         {
-            encode_rw_file_memory_resp(0, command, PLDM_ERROR, 0, response);
-            return;
+            encode_rw_file_memory_resp(0, command, PLDM_ERROR, 0, responsePtr);
+            return response;
         }
 
         offset += dma::maxSize;
@@ -132,12 +136,13 @@ void transferAll(DMAInterface* intf, uint8_t command, fs::path& path,
     auto rc = intf->transferDataHost(path, offset, length, address, upstream);
     if (rc < 0)
     {
-        encode_rw_file_memory_resp(0, command, PLDM_ERROR, 0, response);
-        return;
+        encode_rw_file_memory_resp(0, command, PLDM_ERROR, 0, responsePtr);
+        return response;
     }
 
-    encode_rw_file_memory_resp(0, command, PLDM_SUCCESS, origLength, response);
-    return;
+    encode_rw_file_memory_resp(0, command, PLDM_SUCCESS, origLength,
+                               responsePtr);
+    return response;
 }
 
 } // namespace dma
@@ -146,19 +151,20 @@ void transferAll(DMAInterface* intf, uint8_t command, fs::path& path,
  *
  *  @param[in] request - pointer to PLDM request payload
  *  @param[in] payloadLength - length of the message payload
- *  @param[out] response - response message location
+ *
+ *  @return PLDM response message
  */
-void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
-                        pldm_msg* response);
+std::vector<uint8_t> readFileIntoMemory(const uint8_t* request,
+                                        size_t payloadLength);
 
 /** @brief Handler for writeFileIntoMemory command
  *
  *  @param[in] request - pointer to PLDM request payload
  *  @param[in] payloadLength - length of the message payload
- *  @param[out] response - response message location
+ *
+ *  @return PLDM response message
  */
-void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
-                         pldm_msg* response);
-
+std::vector<uint8_t> writeFileFromMemory(const uint8_t* request,
+                                         size_t payloadLength);
 } // namespace responder
 } // namespace pldm

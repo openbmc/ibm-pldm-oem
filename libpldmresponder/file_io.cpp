@@ -131,19 +131,22 @@ int DMA::transferDataHost(const fs::path& path, uint32_t offset,
 
 } // namespace dma
 
-void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
-                        pldm_msg* response)
+std::vector<uint8_t> readFileIntoMemory(const uint8_t* request,
+                                        size_t payloadLength)
 {
     uint32_t fileHandle = 0;
     uint32_t offset = 0;
     uint32_t length = 0;
     uint64_t address = 0;
+    std::vector<uint8_t> response(
+        (sizeof(pldm_msg_hdr) + PLDM_RW_FILE_MEM_RESP_BYTES), 0);
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
 
     if (payloadLength != PLDM_RW_FILE_MEM_REQ_BYTES)
     {
         encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
-                                   PLDM_ERROR_INVALID_LENGTH, 0, response);
-        return;
+                                   PLDM_ERROR_INVALID_LENGTH, 0, responsePtr);
+        return response;
     }
 
     decode_rw_file_memory_req(request, payloadLength, &fileHandle, &offset,
@@ -157,8 +160,8 @@ void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
     {
         log<level::ERR>("File does not exist", entry("HANDLE=%d", fileHandle));
         encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
-                                   PLDM_INVALID_FILE_HANDLE, 0, response);
-        return;
+                                   PLDM_INVALID_FILE_HANDLE, 0, responsePtr);
+        return response;
     }
 
     auto fileSize = fs::file_size(value.fsPath);
@@ -167,8 +170,8 @@ void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
         log<level::ERR>("Offset exceeds file size", entry("OFFSET=%d", offset),
                         entry("FILE_SIZE=%d", fileSize));
         encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
-                                   PLDM_DATA_OUT_OF_RANGE, 0, response);
-        return;
+                                   PLDM_DATA_OUT_OF_RANGE, 0, responsePtr);
+        return response;
     }
 
     if (offset + length > fileSize)
@@ -181,29 +184,32 @@ void readFileIntoMemory(const uint8_t* request, size_t payloadLength,
         log<level::ERR>("Read length is not a multiple of DMA minSize",
                         entry("LENGTH=%d", length));
         encode_rw_file_memory_resp(0, PLDM_READ_FILE_INTO_MEMORY,
-                                   PLDM_INVALID_READ_LENGTH, 0, response);
-        return;
+                                   PLDM_INVALID_READ_LENGTH, 0, responsePtr);
+        return response;
     }
 
     using namespace dma;
     DMA intf;
-    transferAll<DMA>(&intf, PLDM_READ_FILE_INTO_MEMORY, value.fsPath, offset,
-                     length, address, true, response);
+    return transferAll<DMA>(&intf, PLDM_READ_FILE_INTO_MEMORY, value.fsPath,
+                            offset, length, address, true);
 }
 
-void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
-                         pldm_msg* response)
+std::vector<uint8_t> writeFileFromMemory(const uint8_t* request,
+                                         size_t payloadLength)
 {
     uint32_t fileHandle = 0;
     uint32_t offset = 0;
     uint32_t length = 0;
     uint64_t address = 0;
+    std::vector<uint8_t> response(
+        sizeof(pldm_msg_hdr) + PLDM_RW_FILE_MEM_RESP_BYTES, 0);
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
 
     if (payloadLength != PLDM_RW_FILE_MEM_REQ_BYTES)
     {
         encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY,
-                                   PLDM_ERROR_INVALID_LENGTH, 0, response);
-        return;
+                                   PLDM_ERROR_INVALID_LENGTH, 0, responsePtr);
+        return response;
     }
 
     decode_rw_file_memory_req(request, payloadLength, &fileHandle, &offset,
@@ -214,8 +220,8 @@ void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
         log<level::ERR>("Write length is not a multiple of DMA minSize",
                         entry("LENGTH=%d", length));
         encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY,
-                                   PLDM_INVALID_WRITE_LENGTH, 0, response);
-        return;
+                                   PLDM_INVALID_WRITE_LENGTH, 0, responsePtr);
+        return response;
     }
 
     using namespace pldm::filetable;
@@ -226,8 +232,8 @@ void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
     {
         log<level::ERR>("File does not exist", entry("HANDLE=%d", fileHandle));
         encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY,
-                                   PLDM_INVALID_FILE_HANDLE, 0, response);
-        return;
+                                   PLDM_INVALID_FILE_HANDLE, 0, responsePtr);
+        return response;
     }
 
     auto fileSize = fs::file_size(value.fsPath);
@@ -236,14 +242,14 @@ void writeFileFromMemory(const uint8_t* request, size_t payloadLength,
         log<level::ERR>("Offset exceeds file size", entry("OFFSET=%d", offset),
                         entry("FILE_SIZE=%d", fileSize));
         encode_rw_file_memory_resp(0, PLDM_WRITE_FILE_FROM_MEMORY,
-                                   PLDM_DATA_OUT_OF_RANGE, 0, response);
-        return;
+                                   PLDM_DATA_OUT_OF_RANGE, 0, responsePtr);
+        return response;
     }
 
     using namespace dma;
     DMA intf;
-    transferAll<DMA>(&intf, PLDM_WRITE_FILE_FROM_MEMORY, value.fsPath, offset,
-                     length, address, false, response);
+    return transferAll<DMA>(&intf, PLDM_WRITE_FILE_FROM_MEMORY, value.fsPath,
+                            offset, length, address, false);
 }
 
 } // namespace responder
