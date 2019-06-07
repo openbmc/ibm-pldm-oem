@@ -166,5 +166,15 @@ std::vector<uint8_t> readFileIntoMemory(const uint8_t* request,
  */
 std::vector<uint8_t> writeFileFromMemory(const uint8_t* request,
                                          size_t payloadLength);
+
+/** @brief Handler for GetFileTable command
+ *
+ *  @param[in] request - pointer to PLDM request payload
+ *  @param[in] payloadLength - length of the message payload
+ *
+ *  @return PLDM response message
+ */
+std::vector<uint8_t> getFileTableHandler(const uint8_t* request,
+                                         size_t payloadLength);
 } // namespace responder
 } // namespace pldm

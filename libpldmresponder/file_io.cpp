@@ -252,5 +252,51 @@ std::vector<uint8_t> writeFileFromMemory(const uint8_t* request,
                             offset, length, address, false);
 }
 
+std::vector<uint8_t> getFileTableHandler(const uint8_t* request,
+                                         size_t payloadLength)
+{
+    uint32_t transferHandle = 0;
+    uint8_t transferFlag = 0;
+    uint8_t tableType = 0;
+
+    std::vector<uint8_t> response(sizeof(pldm_msg_hdr) +
+                                  PLDM_GET_FILE_TABLE_MIN_RESP_BYTES);
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+
+    if (payloadLength != PLDM_GET_FILE_TABLE_REQ_BYTES)
+    {
+        encode_get_file_table_resp(0, PLDM_ERROR_INVALID_LENGTH, 0, 0, nullptr,
+                                   0, responsePtr);
+        return response;
+    }
+
+    decode_get_file_table_req(request, payloadLength, &transferHandle,
+                              &transferFlag, &tableType);
+
+    if (tableType != PLDM_FILE_ATTRIBUTE_TABLE)
+    {
+        encode_get_file_table_resp(0, PLDM_INVALID_FILE_TABLE_TYPE, 0, 0,
+                                   nullptr, 0, responsePtr);
+        return response;
+    }
+
+    using namespace pldm::filetable;
+    auto table = getFileTable(FILE_TABLE_JSON);
+    auto attrTable = table.getFileAttrTable();
+    response.resize(response.size() + attrTable.size());
+    responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+
+    if (attrTable.empty())
+    {
+        encode_get_file_table_resp(0, PLDM_FILE_TABLE_UNAVAILABLE, 0, 0,
+                                   nullptr, 0, responsePtr);
+        return response;
+    }
+
+    encode_get_file_table_resp(0, PLDM_SUCCESS, 0, PLDM_START_AND_END,
+                               attrTable.data(), attrTable.size(), responsePtr);
+    return response;
+}
+
 } // namespace responder
 } // namespace pldm

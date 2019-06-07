@@ -511,3 +511,47 @@ TEST_F(TestFileAttrTable, testFileTable)
     ASSERT_EQ(true,
               std::equal(attrTable.begin(), attrTable.end(), table.begin()));
 }
+
+TEST_F(TestFileAttrTable, testGetFileTableCommand)
+{
+    using namespace pldm::filetable;
+    // Initialise the file table with a valid handle of 0
+    getFileTable(fileTableConfig.c_str());
+
+    // <4 bytes - File handle - 0 (0x00 0x00 0x00 0x00)>,
+    // <2 bytes - Filename length - 11 (0x0b 0x00>
+    // <11 bytes - Filename - ASCII for NVRAM-IMAGE>
+    // <4 bytes - File size - 1024 (0x00 0x04 0x00 0x00)>
+    // <4 bytes - File traits - 1 (0x01 0x00 0x00 0x00)>
+    // <3 bytes - Padding (0x00 0x00 0x00)>
+    // <4 bytes - Checksum - 1818411840(0x40 0xc3 0x62 0x6c)>
+    std::vector<uint8_t> attrTable = {
+        0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x4e, 0x56, 0x52, 0x41, 0x4d,
+        0x2d, 0x49, 0x4d, 0x41, 0x47, 0x45, 0x00, 0x04, 0x00, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0xc3, 0x62, 0x6c};
+
+    uint32_t transferHandle = 0;
+    uint8_t opFlag = 0;
+    uint8_t type = 0;
+    uint32_t nextTransferHandle = 0;
+    uint8_t transferFlag = PLDM_START_AND_END;
+
+    std::array<uint8_t, PLDM_GET_FILE_TABLE_REQ_BYTES> requestMsg{};
+    memcpy(requestMsg.data(), &transferHandle, sizeof(transferHandle));
+    memcpy(requestMsg.data() + sizeof(transferHandle), &opFlag, sizeof(opFlag));
+    memcpy(requestMsg.data() + sizeof(transferHandle) + sizeof(opFlag), &type,
+           sizeof(type));
+
+    auto response = getFileTableHandler(requestMsg.data(), requestMsg.size());
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_SUCCESS);
+    size_t offsetSize = sizeof(responsePtr->payload[0]);
+    ASSERT_EQ(0, memcmp(responsePtr->payload + offsetSize, &nextTransferHandle,
+                        sizeof(nextTransferHandle)));
+    offsetSize += sizeof(nextTransferHandle);
+    ASSERT_EQ(0, memcmp(responsePtr->payload + offsetSize, &transferFlag,
+                        sizeof(transferFlag)));
+    offsetSize += sizeof(transferFlag);
+    ASSERT_EQ(0, memcmp(responsePtr->payload + offsetSize, attrTable.data(),
+                        attrTable.size()));
+}
