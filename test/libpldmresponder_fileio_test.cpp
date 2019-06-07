@@ -468,3 +468,36 @@ TEST_F(TestFileTable, ValidateFileTable)
     ASSERT_EQ(true,
               std::equal(attrTable.begin(), attrTable.end(), table.begin()));
 }
+
+TEST_F(TestFileTable, GetFileTableCommand)
+{
+    using namespace pldm::filetable;
+    // Initialise the file table with a valid handle of 0 & 1
+    buildFileTable(fileTableConfig.c_str());
+
+    uint32_t transferHandle = 0;
+    uint8_t opFlag = 0;
+    uint8_t type = 0;
+    uint32_t nextTransferHandle = 0;
+    uint8_t transferFlag = PLDM_START_AND_END;
+
+    std::array<uint8_t, PLDM_GET_FILE_TABLE_REQ_BYTES> requestMsg{};
+    auto request =
+        reinterpret_cast<pldm_get_file_table_req*>(requestMsg.data());
+    request->transfer_handle = transferHandle;
+    request->operation_flag = opFlag;
+    request->table_type = type;
+
+    auto response = getFileTable(requestMsg.data(), requestMsg.size());
+    auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    ASSERT_EQ(responsePtr->payload[0], PLDM_SUCCESS);
+    size_t offsetSize = sizeof(responsePtr->payload[0]);
+    ASSERT_EQ(0, memcmp(responsePtr->payload + offsetSize, &nextTransferHandle,
+                        sizeof(nextTransferHandle)));
+    offsetSize += sizeof(nextTransferHandle);
+    ASSERT_EQ(0, memcmp(responsePtr->payload + offsetSize, &transferFlag,
+                        sizeof(transferFlag)));
+    offsetSize += sizeof(transferFlag);
+    ASSERT_EQ(0, memcmp(responsePtr->payload + offsetSize, attrTable.data(),
+                        attrTable.size()));
+}
