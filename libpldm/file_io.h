@@ -31,6 +31,26 @@ enum pldm_fileio_completion_codes {
 #define PLDM_RW_FILE_MEM_REQ_BYTES 20
 #define PLDM_RW_FILE_MEM_RESP_BYTES 5
 
+/** @struct PLDM_ReadWrite_File_Memory_Request
+ *
+ *  Structure representing PLDM Read/Write file into memory request
+ */
+struct PLDM_ReadWrite_File_Memory_Request {
+	uint32_t file_handle;
+	uint32_t offset;
+	uint32_t length;
+	uint64_t address;
+} __attribute__((packed));
+
+/** @struct PLDM_ReadWrite_File_Memory_Response
+ *
+ *  Structure representing PLDM Read/Write file into memory response
+ */
+struct PLDM_ReadWrite_File_Memory_Response {
+	uint8_t completion_code;
+	uint32_t length;
+} __attribute__((packed));
+
 /** @brief Decode ReadFileIntoMemory and WriteFileFromMemory commands request
  *         data
  *

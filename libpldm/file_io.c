@@ -15,12 +15,13 @@ int decode_rw_file_memory_req(const uint8_t *msg, size_t payload_length,
 		return PLDM_ERROR_INVALID_LENGTH;
 	}
 
-	*file_handle = le32toh(*((uint32_t *)msg));
-	*offset = le32toh(*((uint32_t *)(msg + sizeof(*file_handle))));
-	*length = le32toh(
-	    *((uint32_t *)(msg + sizeof(*file_handle) + sizeof(*offset))));
-	*address = le64toh(*((uint64_t *)(msg + sizeof(*file_handle) +
-					  sizeof(*offset) + sizeof(*length))));
+	struct PLDM_ReadWrite_File_Memory_Request *src =
+	    (struct PLDM_ReadWrite_File_Memory_Request *)msg;
+
+	*file_handle = le32toh(src->file_handle);
+	*offset = le32toh(src->offset);
+	*length = le32toh(src->length);
+	*address = le64toh(src->address);
 
 	return PLDM_SUCCESS;
 }
@@ -32,9 +33,6 @@ int encode_rw_file_memory_resp(uint8_t instance_id, uint8_t command,
 	struct pldm_header_info header = {0};
 	int rc = PLDM_SUCCESS;
 
-	uint8_t *payload = msg->payload;
-	*payload = completion_code;
-
 	header.msg_type = PLDM_RESPONSE;
 	header.instance = instance_id;
 	header.pldm_type = PLDM_IBM_OEM_TYPE;
@@ -44,10 +42,12 @@ int encode_rw_file_memory_resp(uint8_t instance_id, uint8_t command,
 		return rc;
 	}
 
-	if (msg->payload[0] == PLDM_SUCCESS) {
-		uint8_t *dst = msg->payload + sizeof(completion_code);
+	struct PLDM_ReadWrite_File_Memory_Response *dst =
+	    (struct PLDM_ReadWrite_File_Memory_Response *)msg->payload;
+	dst->completion_code = completion_code;
+	if (dst->completion_code == PLDM_SUCCESS) {
 		length = htole32(length);
-		memcpy(dst, &length, sizeof(length));
+		dst->length = length;
 	}
 
 	return PLDM_SUCCESS;
@@ -72,19 +72,16 @@ int encode_rw_file_memory_req(uint8_t instance_id, uint8_t command,
 		return rc;
 	}
 
-	uint8_t *encoded_msg = msg->payload;
+	struct PLDM_ReadWrite_File_Memory_Request *encoded_msg =
+	    (struct PLDM_ReadWrite_File_Memory_Request *)msg->payload;
 	file_handle = htole32(file_handle);
-	memcpy(encoded_msg, &file_handle, sizeof(file_handle));
-	encoded_msg += sizeof(file_handle);
+	(encoded_msg->file_handle) = file_handle;
 	offset = htole32(offset);
-	memcpy(encoded_msg, &offset, sizeof(offset));
-	encoded_msg += sizeof(offset);
+	(encoded_msg->offset) = offset;
 	length = htole32(length);
-	memcpy(encoded_msg, &length, sizeof(length));
-	encoded_msg += sizeof(length);
+	(encoded_msg->length) = length;
 	address = htole64(address);
-	memcpy(encoded_msg, &address, sizeof(address));
-
+	(encoded_msg->address) = address;
 	return PLDM_SUCCESS;
 }
 
@@ -98,11 +95,11 @@ int decode_rw_file_memory_resp(const uint8_t *msg, size_t payload_length,
 	if (payload_length != PLDM_RW_FILE_MEM_RESP_BYTES) {
 		return PLDM_ERROR_INVALID_LENGTH;
 	}
-
-	*completion_code = msg[0];
+	struct PLDM_ReadWrite_File_Memory_Response *src =
+	    (struct PLDM_ReadWrite_File_Memory_Response *)msg;
+	*completion_code = src->completion_code;
 	if (*completion_code == PLDM_SUCCESS) {
-		*length =
-		    le32toh(*((uint32_t *)(msg + sizeof(*completion_code))));
+		*length = le32toh(src->length);
 	} else {
 		*length = 0;
 	}
