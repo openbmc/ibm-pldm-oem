@@ -161,7 +161,7 @@ TEST(ReadWriteFileIntoMemory, testBadDecodeResponse)
     auto rc = decode_rw_file_memory_resp(NULL, 0, &completionCode, &length);
     ASSERT_EQ(rc, PLDM_ERROR_INVALID_DATA);
 
-    std::array<uint8_t, PLDM_RW_FILE_MEM_REQ_BYTES> responseMsg{};
+    std::array<uint8_t, PLDM_RW_FILE_MEM_RESP_BYTES> responseMsg{};
 
     // Payload length is invalid
     rc = decode_rw_file_memory_resp(responseMsg.data(), 0, &completionCode,
