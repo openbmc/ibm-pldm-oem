@@ -86,7 +86,7 @@ int DMA::transferDataHost(const fs::path& path, uint32_t offset,
 
     if (upstream)
     {
-        std::ifstream stream(path.string());
+        std::ifstream stream(path.string(), std::ios::in | std::ios::binary);
         stream.seekg(offset);
 
         // Writing to the VGA memory should be aligned at page boundary,
@@ -126,7 +126,8 @@ int DMA::transferDataHost(const fs::path& path, uint32_t offset,
 
     if (!upstream)
     {
-        std::ofstream stream(path.string());
+        std::ofstream stream(path.string(),
+                             std::ios::in | std::ios::out | std::ios::binary);
 
         stream.seekp(offset);
         stream.write(static_cast<const char*>(vgaMemPtr.get()), length);
