@@ -59,8 +59,11 @@ namespace dma
 // The minimum data size of dma transfer in bytes
 constexpr uint32_t minSize = 16;
 
-// 16MB - 4096B (16773120 bytes) is the maximum data size of DMA transfer
-constexpr size_t maxSize = (16 * 1024 * 1024) - 4096;
+// 16MB - 4096B (16773120 bytes) is the maximum data size of upstream DMA
+// transfer
+constexpr size_t upstreamMaxSize = (16 * 1024 * 1024) - 4096;
+// 128K (131072 bytes) is the maximum data size of downstream DMA transfer
+constexpr size_t downstreamMaxSize = 128 * 1024;
 
 namespace fs = std::filesystem;
 
@@ -117,20 +120,21 @@ Response transferAll(DMAInterface* intf, uint8_t command, fs::path& path,
     uint32_t origLength = length;
     Response response(sizeof(pldm_msg_hdr) + PLDM_RW_FILE_MEM_RESP_BYTES, 0);
     auto responsePtr = reinterpret_cast<pldm_msg*>(response.data());
+    auto maxSize = upstream ? dma::upstreamMaxSize : dma::downstreamMaxSize;
 
-    while (length > dma::maxSize)
+    while (length > maxSize)
     {
-        auto rc = intf->transferDataHost(path, offset, dma::maxSize, address,
-                                         upstream);
+        auto rc =
+            intf->transferDataHost(path, offset, maxSize, address, upstream);
         if (rc < 0)
         {
             encode_rw_file_memory_resp(0, command, PLDM_ERROR, 0, responsePtr);
             return response;
         }
 
-        offset += dma::maxSize;
-        length -= dma::maxSize;
-        address += dma::maxSize;
+        offset += maxSize;
+        length -= maxSize;
+        address += maxSize;
     }
 
     auto rc = intf->transferDataHost(path, offset, length, address, upstream);
