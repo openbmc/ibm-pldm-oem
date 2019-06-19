@@ -143,8 +143,8 @@ TEST(TransferDataHost, GoodPath)
     ASSERT_EQ(0, memcmp(responsePtr->payload + sizeof(responsePtr->payload[0]),
                         &length, sizeof(length)));
 
-    // maxsize of DMA
-    length = maxSize;
+    // upstreamMaxSize of DMA
+    length = upstreamMaxSize;
     EXPECT_CALL(dmaObj, transferDataHost(path, 0, length, 0, true)).Times(1);
     response = transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path,
                                     0, length, 0, true);
@@ -153,10 +153,12 @@ TEST(TransferDataHost, GoodPath)
     ASSERT_EQ(0, memcmp(responsePtr->payload + sizeof(responsePtr->payload[0]),
                         &length, sizeof(length)));
 
-    // length greater than maxsize of DMA
-    length = maxSize + minSize;
-    EXPECT_CALL(dmaObj, transferDataHost(path, 0, maxSize, 0, true)).Times(1);
-    EXPECT_CALL(dmaObj, transferDataHost(path, maxSize, minSize, maxSize, true))
+    // length greater than upstreamMaxSize of DMA
+    length = upstreamMaxSize + minSize;
+    EXPECT_CALL(dmaObj, transferDataHost(path, 0, upstreamMaxSize, 0, true))
+        .Times(1);
+    EXPECT_CALL(dmaObj, transferDataHost(path, upstreamMaxSize, minSize,
+                                         upstreamMaxSize, true))
         .Times(1);
     response = transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path,
                                     0, length, 0, true);
@@ -165,8 +167,8 @@ TEST(TransferDataHost, GoodPath)
     ASSERT_EQ(0, memcmp(responsePtr->payload + sizeof(responsePtr->payload[0]),
                         &length, sizeof(length)));
 
-    // length greater than 2*maxsize of DMA
-    length = 3 * maxSize;
+    // length greater than 2*upstreamMaxSize of DMA
+    length = 3 * upstreamMaxSize;
     EXPECT_CALL(dmaObj, transferDataHost(_, _, _, _, true)).Times(3);
     response = transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path,
                                     0, length, 0, true);
@@ -203,7 +205,7 @@ TEST(TransferDataHost, BadPath)
 
     // length greater than maxsize of DMA and transferDataHost returning a
     // negative errno
-    length = maxSize + minSize;
+    length = upstreamMaxSize + minSize;
     EXPECT_CALL(dmaObj, transferDataHost(_, _, _, _, _)).WillOnce(Return(-1));
     response = transferAll<MockDMA>(&dmaObj, PLDM_READ_FILE_INTO_MEMORY, path,
                                     0, length, 0, true);
