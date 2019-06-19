@@ -87,9 +87,16 @@ int DMA::transferDataHost(const fs::path& path, uint32_t offset,
     if (upstream)
     {
         std::ifstream stream(path.string());
-
         stream.seekg(offset);
-        stream.read(static_cast<char*>(vgaMemPtr.get()), length);
+
+        // Writing to the VGA memory should be aligned at page boundary,
+        // otherwise write data into a buffer aligned at page boundary and
+        // then write to the VGA memory.
+        std::vector<char> buffer{};
+        buffer.resize(pageAlignedLength);
+        stream.read(buffer.data(), length);
+        memcpy(static_cast<char*>(vgaMemPtr.get()), buffer.data(),
+               pageAlignedLength);
 
         if (static_cast<uint32_t>(stream.gcount()) != length)
         {
