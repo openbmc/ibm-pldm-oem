@@ -1,0 +1,8 @@
+Code-Review+2: Deepak Kodihalli <dkodihal@in.ibm.com>
+Ok-To-Test+1: Jenkins <openbmc-ci-admin@ozlabs.org>
+Verified+1: Jenkins <openbmc-ci-admin@ozlabs.org>
+Submitted-by: Deepak Kodihalli <dkodihal@in.ibm.com>
+Submitted-at: Tue, 25 Jun 2019 05:47:18 +0000
+Reviewed-on: https://gerrit.openbmc-project.xyz/c/openbmc/ibm-pldm-oem/+/22749
+Project: openbmc/ibm-pldm-oem
+Branch: refs/heads/master
