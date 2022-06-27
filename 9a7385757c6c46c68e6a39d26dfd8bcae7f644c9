@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "245a94cf_95010e2e",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000206
+      },
+      "writtenOn": "2022-06-27T13:55:58Z",
+      "side": 1,
+      "message": "The CI fail is due to clang format issues in the repository.",
+      "revId": "9a7385757c6c46c68e6a39d26dfd8bcae7f644c9",
+      "serverId": "adbd0a64-1f21-4d83-b585-671fe73cb6e4"
+    }
+  ]
+}
